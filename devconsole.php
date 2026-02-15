@@ -174,7 +174,7 @@ function exec_command($cmd, $mode, $cwd) {
                     <td>
                         <?php if(!$d): ?>
                             <a href="?view=<?php echo urlencode($p); ?>" target="_blank" class="btn btn-v">View</a>
-                            <a href="?download=<?php echo urlencode($p); ?>" class="btn btn-d">Download</a>
+                            <a href="?download=<?php echo urlencode($p); ?>" class="btn btn-d">Get</a>
                             <a href="?delete=<?php echo urlencode($p); ?>&dir=<?php echo urlencode($cwd); ?>" class="btn btn-del" onclick="return confirm('Delete?')">Del</a>
                         <?php endif; ?>
                     </td>
