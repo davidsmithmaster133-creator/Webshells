@@ -1,6 +1,6 @@
 Dev_Console webshell
 
-<img width="1920" height="838" alt="dev_console" src="https://github.com/user-attachments/assets/5e679b3f-8f01-4881-9b72-416cbb4e7082" not
+<img width="1920" height="838" alt="dev_console" src="https://github.com/user-attachments/assets/5e679b3f-8f01-4881-9b72-416cbb4e7082" />
 
 
 Dev_Dashboard Webshell
@@ -21,6 +21,8 @@ echo "Webshell written to $file";
 ```
 
 C:\xampp\htdocs\dashboard\jp\404.php
+
+
 ```
 <?php
 $file = '../htdocs/dashboard/jp/404.php';
